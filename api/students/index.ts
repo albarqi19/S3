@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { SHEETS_CONFIG } from '../../src/config/sheets.config';
 
-const API_KEY = 'AIzaSyDLnUtcYqHo9bMGafkKyUd4108OzNf9u4U';
-const SPREADSHEET_ID = '1JVHUXf23kQ0ZVu8Hc1g-sqrMCUwHufw4Bj4KKGyd_j4';
 const BASE_URL = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -28,19 +27,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'GET') {
       console.log('Starting GET request');
       
-      const sheetName = 'Students Data';
-      const range = 'A2:H';
-      const formattedRange = `${encodeURIComponent(sheetName)}!${range}`;
-      
-      const url = new URL(`${BASE_URL}/${SPREADSHEET_ID}/values/${formattedRange}`);
-      url.searchParams.append('key', API_KEY);
+      const range = SHEETS_CONFIG.ranges.students;
+      const url = new URL(`${BASE_URL}/${SHEETS_CONFIG.spreadsheetId}/values/${range}`);
+      url.searchParams.append('key', SHEETS_CONFIG.apiKey);
       url.searchParams.append('majorDimension', 'ROWS');
       
-      console.log('Fetching sheet data:', {
-        sheetName,
-        rangeNotation: range,
-        formattedRange,
-        url: url.toString().replace(API_KEY, '***')
+      console.log('Fetching students data:', {
+        range,
+        url: url.toString().replace(SHEETS_CONFIG.apiKey, '***')
       });
 
       const response = await fetch(url.toString(), {
@@ -60,9 +54,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           status: response.status,
           statusText: response.statusText,
           error: errorText,
-          url: url.toString().replace(API_KEY, '***')
+          url: url.toString().replace(SHEETS_CONFIG.apiKey, '***')
         });
-        throw new Error(`Failed to fetch data: ${response.status}`);
+        throw new Error(`Failed to fetch data: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
@@ -96,13 +90,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const newStudent = req.body;
       console.log('Adding new student:', newStudent);
       
-      const sheetName = 'Students Data';
-      const range = 'A2:H';
-      const formattedRange = `${encodeURIComponent(sheetName)}!${range}`;
+      const range = SHEETS_CONFIG.ranges.students;
       
       // Get current data first
-      const getUrl = new URL(`${BASE_URL}/${SPREADSHEET_ID}/values/${formattedRange}`);
-      getUrl.searchParams.append('key', API_KEY);
+      const getUrl = new URL(`${BASE_URL}/${SHEETS_CONFIG.spreadsheetId}/values/${range}`);
+      getUrl.searchParams.append('key', SHEETS_CONFIG.apiKey);
       getUrl.searchParams.append('majorDimension', 'ROWS');
       
       const getResponse = await fetch(getUrl.toString());
@@ -115,8 +107,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const newRowIndex = rows.length + 2; // +2 because we start from A2
       
       // Append the new student
-      const appendUrl = new URL(`${BASE_URL}/${SPREADSHEET_ID}/values/${sheetName}!A${newRowIndex}:H${newRowIndex}:append`);
-      appendUrl.searchParams.append('key', API_KEY);
+      const appendUrl = new URL(`${BASE_URL}/${SHEETS_CONFIG.spreadsheetId}/values/Students Data!A${newRowIndex}:H${newRowIndex}:append`);
+      appendUrl.searchParams.append('key', SHEETS_CONFIG.apiKey);
       appendUrl.searchParams.append('valueInputOption', 'RAW');
       appendUrl.searchParams.append('insertDataOption', 'INSERT_ROWS');
       
