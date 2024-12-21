@@ -18,130 +18,110 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // التحقق من متغيرات البيئة
-    if (!spreadsheetId) {
-      console.error('GOOGLE_SHEETS_ID is not set');
-      throw new Error('Google Sheets ID is not configured');
-    }
-
     switch (req.method) {
       case 'GET':
         try {
           console.log('Fetching students data...');
-          console.log('Using spreadsheet ID:', spreadsheetId);
+          
+          const range = 'Students Data!A2:H';
+          console.log('Fetching range:', range);
           
           const response = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: 'Students Data!A2:H'
+            range,
+            valueRenderOption: 'UNFORMATTED_VALUE',
+            dateTimeRenderOption: 'FORMATTED_STRING'
           });
           
-          if (!response.data) {
-            throw new Error('No response data received from Google Sheets');
+          if (!response.data.values) {
+            console.log('No data found');
+            return res.status(200).json([]);
           }
           
-          console.log('Response received:', {
-            status: response.status,
-            hasData: !!response.data,
-            rowCount: response.data.values?.length || 0
-          });
-          
-          const rows = response.data.values || [];
-          const students = rows.map(row => ({
-            id: row[0]?.toString() || '',
-            studentName: row[1]?.toString() || '',
-            level: row[2]?.toString() || '',
-            classNumber: row[3]?.toString() || '',
-            violations: row[4]?.toString() || '',
-            parts: row[5]?.toString() || '',
-            points: parseInt(row[6]?.toString() || '0'),
-            phone: row[7]?.toString() || ''
+          const rows = response.data.values;
+          const students = rows.map((row: any[]) => ({
+            id: String(row[0] || ''),
+            studentName: String(row[1] || ''),
+            level: String(row[2] || ''),
+            classNumber: String(row[3] || ''),
+            violations: String(row[4] || ''),
+            parts: String(row[5] || ''),
+            points: Number(row[6] || 0),
+            phone: String(row[7] || '')
           }));
 
           console.log(`Successfully fetched ${students.length} students`);
-          res.status(200).json(students);
-        } catch (error) {
-          console.error('Error fetching students:', error);
+          return res.status(200).json(students);
+        } catch (error: any) {
+          console.error('Error details:', {
+            message: error.message,
+            stack: error.stack,
+            response: error.response?.data
+          });
           throw error;
         }
         break;
 
       case 'POST':
         try {
-          console.log('Adding new student...');
           const newStudent = req.body as Student;
-          const studentId = newStudent.id;
+          console.log('Adding new student:', newStudent);
           
-          console.log('Student data:', { id: studentId, ...newStudent });
+          const range = 'Students Data!A2:H';
           
-          // التحقق من عدم وجود طالب بنفس رقم الهوية
-          const existingResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId,
-            range: 'Students Data!A2:A'
-          });
-          
-          const existingIds = existingResponse.data.values || [];
-          if (existingIds.some(row => row[0]?.toString() === studentId)) {
-            console.log('Duplicate student ID:', studentId);
-            res.status(400).json({ error: 'رقم الهوية مستخدم مسبقاً' });
-            return;
-          }
-          
-          // Get current data to find the last row
+          // Get current data
           const currentData = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: 'Students Data!A2:H'
+            range
           });
           
-          const currentRows = currentData.data.values || [];
-          const newRowIndex = currentRows.length + 2; // +2 because we start from A2
+          const rows = currentData.data.values || [];
+          const newRowIndex = rows.length + 2;
           
-          // Add the new row
-          const range = `Students Data!A${newRowIndex}:H${newRowIndex}`;
-          console.log('Adding to range:', range);
-          
+          // Add new student
           await sheets.spreadsheets.values.update({
             spreadsheetId,
-            range,
+            range: `Students Data!A${newRowIndex}:H${newRowIndex}`,
             valueInputOption: 'RAW',
             requestBody: {
               values: [[
-                studentId,
+                newStudent.id,
                 newStudent.studentName,
                 newStudent.level,
                 newStudent.classNumber,
                 newStudent.violations || '',
                 newStudent.parts || '',
                 newStudent.points || 0,
-                newStudent.phone
+                newStudent.phone || ''
               ]]
             }
           });
           
-          console.log('Student added successfully');
-          res.status(200).json({ id: studentId, ...newStudent });
-        } catch (error) {
-          console.error('Error adding student:', error);
+          return res.status(200).json(newStudent);
+        } catch (error: any) {
+          console.error('Error adding student:', {
+            message: error.message,
+            stack: error.stack,
+            response: error.response?.data
+          });
           throw error;
         }
         break;
 
       default:
-        res.status(405).json({ error: 'Method not allowed' });
+        return res.status(405).json({ error: 'Method not allowed' });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('API Error:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      error
+      message: error.message,
+      stack: error.stack,
+      response: error.response?.data
     });
     
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    const errorDetails = error instanceof Error ? error.stack : '';
-    
-    res.status(500).json({ 
-      error: 'Internal server error', 
-      message: errorMessage,
-      details: errorDetails,
+    return res.status(500).json({
+      error: 'Internal server error',
+      message: error.message,
+      details: error.stack,
       timestamp: new Date().toISOString()
     });
   }
