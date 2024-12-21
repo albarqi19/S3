@@ -1,62 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { SHEETS_CONFIG } from '../../src/config/sheets.config';
-
-const BASE_URL = 'https://sheets.googleapis.com/v4/spreadsheets';
-
-async function fetchSheetData(range: string) {
-  const sheetName = range.split('!')[0];
-  const rangeNotation = range.split('!')[1];
-  const formattedRange = `${encodeURIComponent(sheetName)}!${rangeNotation}`;
-  
-  const url = new URL(`${BASE_URL}/${SHEETS_CONFIG.spreadsheetId}/values/${formattedRange}`);
-  url.searchParams.append('key', SHEETS_CONFIG.apiKey);
-  url.searchParams.append('majorDimension', 'ROWS');
-  
-  console.log('Fetching sheet data:', {
-    sheetName,
-    rangeNotation,
-    formattedRange,
-    url: url.toString().replace(SHEETS_CONFIG.apiKey, '***')
-  });
-  
-  const response = await fetch(url.toString(), {
-    method: 'GET',
-    headers: {
-      'Accept': 'application/json'
-    }
-  });
-
-  console.log('Response status:', response.status);
-  console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('API Error:', {
-      status: response.status,
-      statusText: response.statusText,
-      error: errorText,
-      url: url.toString().replace(SHEETS_CONFIG.apiKey, '***')
-    });
-    throw new Error(`Failed to fetch data: ${response.status} - ${errorText}`);
-  }
-
-  const data = await response.json();
-  console.log('Received data:', {
-    range,
-    rowCount: data.values?.length || 0,
-    hasData: !!data.values
-  });
-
-  return data.values || [];
-}
+import { GoogleSpreadsheet } from 'google-spreadsheet';
+import { JWT } from 'google-auth-library';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  console.log('API request received:', {
-    method: req.method,
-    url: req.url,
-    headers: req.headers
-  });
-
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -71,23 +18,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Initialize auth
+    const serviceAccountAuth = new JWT({
+      email: 'nafes-service@nafes-412822.iam.gserviceaccount.com',
+      key: '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDKXwBvEMoqfPP4\nOYB3JyZEcJKFLe+tUhIJHOqV4/2SAZYQEQzqHC3l7+zfIqX/h8Jq2xhHhQQZBOZw\nZKPovz3oGGrUbZxuGPsqPyErvXJTIqGXwjvLMcGdDY6VlXz3xYzqX6+LGxVF5Iyh\nTkKGBkYPo6XhPZqf+QrLKEHvVsWfBYQzU+0IPV+dXbBBGUkH7PB/q/EFq6+klHDp\nYKEOoWQxesBWQGYXJzmCUVYPh9l6TeYy2IXgLHDTRQvJHHXPNhPHN5hYXhPRGrE6\nYQZJ5WiGSQYhYP1UOJ5UYZXwkgqvlWZH+EwQS6ekqTtQVGYIQR+FSEvGQYXwNYqD\nzWKOYxvjAgMBAAECggEABUJ/FZ5YHhHXPn0+/FYeHQ2mvZwqb8VMtYGgGOMDUr3A\nPHVWwXCqvAM7zC7qfdXBQontTFqYwsUL/uUZQYWu5XL/UGDLcKZEZFm6ZPKnvjYS\nXVOGQKpuJvZ+0YEF/DYgQHHZVXWmRXjyuQNak+0GQj9lfDGDyfJ2XvH7AZsZyS9l\nwGGDYZsD/N6HRtKgwEBXpEgRKUQkP4rRXrwUVCEtqh7+y8OZXz/ZZcfy8dOAxnBo\nEVPEPzdd3EQFEGdF4IXVKkuUBzHFVXvLPdlcwgWkXXsYFq+8MgUXvsLEKS0fBxXw\nxkBRZYBLbFEXtF1X4MBIRuGvxUZYHWfE4xfUUhvPYQKBgQDnCELJHfkGXuGvh5Cw\nVBpYHQT/X0JJXAHxEiQqbpZVeQxLk8iGUyFEv1oWwqUUcKj9MHwVSEQNK9TJpvJ4\nB7/coaK6UOTEVVLhQXx3p7FFtmJ+LNzVQ0vbKZLUxTHciYFd1Jyw5o/HEeK+h2Yk\nPJHKAYZH9c+ODSGaZnp8KRKQYQKBgQDgLwRpGf6HHmxub1dKXVqeVRGZVNLc1WQm\nKQNGRJEVVoDUElOYKPrR8eg/SaQAiZvkH2JQpZMQQBJEUhzYDRJwuSPsXQTmLlhE\nPLlDVZq/Ug7VeRGXXfGJcZ2SAOuqXTEEGQghyYJbVJGPnNvj9ixuGwKELJ+hgAGn\nUfzQhpQZwwKBgQCIlVtHYi/+UzVVXhEqx6Wm+qwHYRDjRFZBzYRlyJGZHtJCQ1+w\nqQVhXhXvSqJ5OFBfGUYxzE4mNn7LJXgxwPUG9GGXZVtD9KZo+4FPrTMJqLJHhEYj\nBWPQyC3NqGQ6wFBUqfXxZmGkuQTlNgQYQYRz4p2TYBCpGy0ORcO1BNEFwQKBgFqK\nOOeq1GXBSi7/jOUzpGqZQZyZJHcbVEhAc6aRqVvRbqCxfE7hoNnhqZH0KyVPBVIL\nkqRgkF5xGtFJxkZ9JPcIKhpBQFDhNTJzDDvxYtaiUu6BVjVVi4hAXFE1hGBsHUyf\nEVlhHkXEuKDZQQd5RZHlaMXTIZgEABWPGTW8GDVrAoGALTlgqVHKvLqaVHnvlph8\n0Qf9/tIqxJqDQZVpN8R/FE6OIWPPXcKhxNZFLGtjEWe0+K/Y0Jz4xCjYL0ZUzAGk\nFXX4PwCnxUAqwQb1sF4RNogxrG4ryNqzqTmzVOaVGvz/uJTcAhkwkzuVpnAoaQZd\nCqXwK6Sjj+wVL4eeXDYXdAQ=\n-----END PRIVATE KEY-----\n',
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+
+    // Initialize the sheet
+    const doc = new GoogleSpreadsheet(SHEETS_CONFIG.spreadsheetId, serviceAccountAuth);
+    await doc.loadInfo();
+
+    const sheet = doc.sheetsByTitle['Students Data'];
+    if (!sheet) {
+      throw new Error('Sheet not found');
+    }
+
     if (req.method === 'GET') {
       console.log('Starting GET request for students');
       
-      const data = await fetchSheetData(SHEETS_CONFIG.ranges.students);
+      const rows = await sheet.getRows();
       console.log('Successfully fetched students data:', {
-        rowCount: data.length
+        rowCount: rows.length
       });
 
-      const students = data.map(row => ({
-        id: row[0]?.toString() || '',
-        studentName: row[1]?.toString() || '',
-        level: row[2]?.toString() || '',
-        classNumber: row[3]?.toString() || '',
-        violations: row[4]?.toString() || '',
-        parts: row[5]?.toString() || '',
-        points: parseInt(row[6]?.toString() || '0'),
-        phone: row[7]?.toString() || ''
+      const students = rows.map(row => ({
+        id: row.get('id') || '',
+        studentName: row.get('studentName') || '',
+        level: row.get('level') || '',
+        classNumber: row.get('classNumber') || '',
+        violations: row.get('violations') || '',
+        parts: row.get('parts') || '',
+        points: parseInt(row.get('points') || '0'),
+        phone: row.get('phone') || ''
       }));
 
       return res.status(200).json(students);
@@ -96,55 +59,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'POST') {
       const newStudent = req.body;
       console.log('Adding new student:', newStudent);
-      
-      // Get current data first
-      const data = await fetchSheetData(SHEETS_CONFIG.ranges.students);
-      const newRowIndex = data.length + 2; // +2 because we start from A2
-      
-      // Append the new student
-      const appendUrl = new URL(`${BASE_URL}/${SHEETS_CONFIG.spreadsheetId}/values/Students Data!A${newRowIndex}:H${newRowIndex}:append`);
-      appendUrl.searchParams.append('key', SHEETS_CONFIG.apiKey);
-      appendUrl.searchParams.append('valueInputOption', 'RAW');
-      appendUrl.searchParams.append('insertDataOption', 'INSERT_ROWS');
-      
-      const appendResponse = await fetch(appendUrl.toString(), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          values: [[
-            newStudent.id,
-            newStudent.studentName,
-            newStudent.level,
-            newStudent.classNumber,
-            newStudent.violations || '',
-            newStudent.parts || '',
-            newStudent.points || 0,
-            newStudent.phone || ''
-          ]]
-        })
+
+      const row = await sheet.addRow({
+        id: newStudent.id,
+        studentName: newStudent.studentName,
+        level: newStudent.level,
+        classNumber: newStudent.classNumber,
+        violations: newStudent.violations || '',
+        parts: newStudent.parts || '',
+        points: newStudent.points || 0,
+        phone: newStudent.phone || ''
       });
-      
-      if (!appendResponse.ok) {
-        const errorText = await appendResponse.text();
-        throw new Error(`Failed to append data: ${appendResponse.status} - ${errorText}`);
-      }
-      
-      return res.status(200).json(newStudent);
+
+      return res.status(200).json({
+        id: row.get('id'),
+        studentName: row.get('studentName'),
+        level: row.get('level'),
+        classNumber: row.get('classNumber'),
+        violations: row.get('violations'),
+        parts: row.get('parts'),
+        points: parseInt(row.get('points') || '0'),
+        phone: row.get('phone')
+      });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error: any) {
-    console.error('API Error:', {
-      message: error.message,
-      stack: error.stack
-    });
-
+    console.error('API Error:', error);
     return res.status(500).json({
       error: 'Internal server error',
       message: error.message,
-      details: error.stack,
       timestamp: new Date().toISOString()
     });
   }
