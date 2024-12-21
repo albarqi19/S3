@@ -1,30 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { google } from 'googleapis';
 
-const auth = new google.auth.GoogleAuth({
-  credentials: {
-    type: "service_account",
-    project_id: "sonic-momentum-292409",
-    private_key_id: "b2a4d9c5c8d9e6f3a2b1c4d5e6f3a2b1c4d5e6f3",
-    client_email: "kedma-439@sonic-momentum-292409.iam.gserviceaccount.com",
-    client_id: "123456789012345678901",
-    auth_uri: "https://accounts.google.com/o/oauth2/auth",
-    token_uri: "https://oauth2.googleapis.com/token",
-    auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-    client_x509_cert_url: "https://www.googleapis.com/robot/v1/metadata/x509/kedma-439%40sonic-momentum-292409.iam.gserviceaccount.com",
-    private_key: `-----BEGIN PRIVATE KEY-----
-MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCz4MeFaHIpDGZl
-VBwPeehblFoCz2fyRzOO9v6nHVPioy2wGI1/h0tsDuicCNLXxwhtITZ8mdaSOULn
-yEKh38fhc81dYjfv9LQfWmaXDgVWcttAXAldxRCDg8Aj6YIew7BsRm51GnXCgkGb
-Nc419UvzhiBtxeTrYhn/LmyZ7pbx/M1GAaAYphRoxqk90Ki6VMXGqcLpS8sKRBTa
-rmSxkF0ZeOuubhoO8wcD1ITtKygvpKRCjKOrcvn5
------END PRIVATE KEY-----`
-  },
-  scopes: ['https://www.googleapis.com/auth/spreadsheets']
-});
-
-const sheets = google.sheets({ version: 'v4', auth });
-const spreadsheetId = "1JVHUXf23kQ0ZVu8Hc1g-sqrMCUwHufw4Bj4KKGyd_j4";
+const API_KEY = 'AIzaSyBOXnnT1F-h9s1FP3063BQ_-TXSw14z_Kg';
+const SPREADSHEET_ID = '1JVHUXf23kQ0ZVu8Hc1g-sqrMCUwHufw4Bj4KKGyd_j4';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('API request received:', {
@@ -50,43 +27,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'GET') {
       console.log('Starting GET request');
       
-      try {
-        console.log('Attempting to fetch data from Google Sheets');
-        const response = await sheets.spreadsheets.values.get({
-          spreadsheetId,
-          range: 'Students Data!A2:H',
-          valueRenderOption: 'FORMATTED_VALUE',
-          dateTimeRenderOption: 'FORMATTED_STRING'
-        });
+      const sheetName = 'Students Data';
+      const range = 'A2:H';
+      const formattedRange = `${encodeURIComponent(sheetName)}!${range}`;
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${formattedRange}?key=${API_KEY}&majorDimension=ROWS`;
 
-        console.log('Google Sheets response received:', {
-          status: response.status,
-          hasData: !!response.data,
-          rowCount: response.data.values?.length || 0
-        });
+      console.log('Fetching sheet data:', {
+        sheetName,
+        rangeNotation: range,
+        formattedRange,
+        url: url.replace(API_KEY, '***')
+      });
 
-        const rows = response.data.values || [];
-        const students = rows.map(row => ({
-          id: row[0]?.toString() || '',
-          studentName: row[1]?.toString() || '',
-          level: row[2]?.toString() || '',
-          classNumber: row[3]?.toString() || '',
-          violations: row[4]?.toString() || '',
-          parts: row[5]?.toString() || '',
-          points: parseInt(row[6]?.toString() || '0'),
-          phone: row[7]?.toString() || ''
-        }));
+      const response = await fetch(url);
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
-        console.log('Data processed successfully');
-        return res.status(200).json(students);
-      } catch (error: any) {
-        console.error('Error in GET request:', {
-          message: error.message,
-          stack: error.stack,
-          response: error.response?.data
-        });
-        throw error;
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+
+      const data = await response.json();
+      console.log('Received data:', {
+        range: data.range,
+        rowCount: data.values?.length,
+        hasData: !!data.values
+      });
+
+      if (!data.values) {
+        return res.status(200).json([]);
+      }
+
+      const students = data.values.map((row: any[]) => ({
+        id: row[0]?.toString() || '',
+        studentName: row[1]?.toString() || '',
+        level: row[2]?.toString() || '',
+        classNumber: row[3]?.toString() || '',
+        violations: row[4]?.toString() || '',
+        parts: row[5]?.toString() || '',
+        points: parseInt(row[6]?.toString() || '0'),
+        phone: row[7]?.toString() || ''
+      }));
+
+      return res.status(200).json(students);
     }
 
     if (req.method === 'POST') {
@@ -94,23 +77,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const newStudent = req.body;
         console.log('Adding new student:', newStudent);
         
-        const range = 'Students Data!A2:H';
-        
-        // Get current data
-        const currentData = await sheets.spreadsheets.values.get({
-          spreadsheetId,
-          range
+        const sheetName = 'Students Data';
+        const range = 'A2:H';
+        const formattedRange = `${encodeURIComponent(sheetName)}!${range}`;
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${formattedRange}?key=${API_KEY}&majorDimension=ROWS`;
+
+        console.log('Fetching sheet data:', {
+          sheetName,
+          rangeNotation: range,
+          formattedRange,
+          url: url.replace(API_KEY, '***')
         });
-        
-        const rows = currentData.data.values || [];
-        const newRowIndex = rows.length + 2;
+
+        const response = await fetch(url);
+        console.log('Response status:', response.status);
+        console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Received data:', {
+          range: data.range,
+          rowCount: data.values?.length,
+          hasData: !!data.values
+        });
+
+        if (!data.values) {
+          throw new Error('No data found in the sheet');
+        }
+
+        const rows = data.values;
+        const newRowIndex = rows.length + 1;
         
         // Add new student
-        await sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: `Students Data!A${newRowIndex}:H${newRowIndex}`,
-          valueInputOption: 'RAW',
-          requestBody: {
+        const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${formattedRange}:append?key=${API_KEY}&majorDimension=ROWS`;
+        const appendResponse = await fetch(appendUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
             values: [[
               newStudent.id,
               newStudent.studentName,
@@ -121,15 +129,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               newStudent.points || 0,
               newStudent.phone || ''
             ]]
-          }
+          })
         });
-        
+
+        console.log('Append response status:', appendResponse.status);
+        console.log('Append response headers:', Object.fromEntries(appendResponse.headers.entries()));
+
+        if (!appendResponse.ok) {
+          throw new Error(`HTTP error! status: ${appendResponse.status}`);
+        }
+
         return res.status(200).json(newStudent);
       } catch (error: any) {
         console.error('Error adding student:', {
           message: error.message,
-          stack: error.stack,
-          response: error.response?.data
+          stack: error.stack
         });
         throw error;
       }
@@ -137,10 +151,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error: any) {
-    console.error('Fatal API Error:', {
+    console.error('API Error:', {
       message: error.message,
-      stack: error.stack,
-      response: error.response?.data
+      stack: error.stack
     });
 
     return res.status(500).json({
