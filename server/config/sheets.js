@@ -1,5 +1,13 @@
 import { google } from 'googleapis';
 
+const privateKey = `-----BEGIN PRIVATE KEY-----
+MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCz4MeFaHIpDGZl
+VBwPeehblFoCz2fyRzOO9v6nHVPioy2wGI1/h0tsDuicCNLXxwhtITZ8mdaSOULn
+yEKh38fhc81dYjfv9LQfWmaXDgVWcttAXAldxRCDg8Aj6YIew7BsRm51GnXCgkGb
+Nc419UvzhiBtxeTrYhn/LmyZ7pbx/M1GAaAYphRoxqk90Ki6VMXGqcLpS8sKRBTa
+rmSxkF0ZeOuubhoO8wcD1ITtKygvpKRCjKOrcvn5
+-----END PRIVATE KEY-----`;
+
 const auth = new google.auth.GoogleAuth({
   credentials: {
     type: "service_account",
@@ -11,7 +19,7 @@ const auth = new google.auth.GoogleAuth({
     token_uri: "https://oauth2.googleapis.com/token",
     auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
     client_x509_cert_url: "https://www.googleapis.com/robot/v1/metadata/x509/kedma-439%40sonic-momentum-292409.iam.gserviceaccount.com",
-    private_key: "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCz4MeFaHIpDGZl\nVBwPeehblFoCz2fyRzOO9v6nHVPioy2wGI1/h0tsDuicCNLXxwhtITZ8mdaSOULn\nyEKh38fhc81dYjfv9LQfWmaXDgVWcttAXAldxRCDg8Aj6YIew7BsRm51GnXCgkGb\nNc419UvzhiBtxeTrYhn/LmyZ7pbx/M1GAaAYphRoxqk90Ki6VMXGqcLpS8sKRBTa\nrmSxkF0ZeOuubhoO8wcD1ITtKygvpKRCjKOrcvn5"
+    private_key: privateKey
   },
   scopes: ['https://www.googleapis.com/auth/spreadsheets']
 });
