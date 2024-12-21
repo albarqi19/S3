@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const API_KEY = 'AIzaSyBOXnnT1F-h9s1FP3063BQ_-TXSw14z_Kg';
+const API_KEY = 'AIzaSyDLnUtcYqHo9bMGafkKyUd4108OzNf9u4U';
 const SPREADSHEET_ID = '1JVHUXf23kQ0ZVu8Hc1g-sqrMCUwHufw4Bj4KKGyd_j4';
 const BASE_URL = 'https://sheets.googleapis.com/v4/spreadsheets';
 
